@@ -1,0 +1,96 @@
+// -*- coding: utf-8; mode: groovy -*-
+
+plugins {
+	id 'java'
+	id "maven-publish"
+	id "com.jfrog.bintray" version "1.7.3"
+}
+
+apply from: "${rootProject.projectDir}/gradle/version.gradle"
+apply from: "${rootProject.projectDir}/gradle/sourceArtifact.gradle"
+apply from: "${rootProject.projectDir}/gradle/bintray.gradle"
+
+group 'jp.xet'
+
+// compiler
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+tasks.withType(AbstractCompile) each {
+	it.options.encoding = "UTF-8"
+}
+compileJava {
+	options.compilerArgs << "-Werror"
+	options.compilerArgs << "-Xlint:all" << "-Xlint:-processing" << "-Xlint:-deprecation"
+}
+
+// dependencies
+repositories {
+	jcenter()
+	mavenCentral()
+	maven { url "https://s3-us-west-2.amazonaws.com/dynamodb-local/release" } // for dynamodb local
+}
+
+dependencies {
+	compile "junit:junit:4.12"
+	compile "com.amazonaws:aws-java-sdk-dynamodb:1.11.269"
+	compile("com.amazonaws:DynamoDBLocal:1.11.86") {
+		exclude group: "org.eclipse.jetty"
+	}
+}
+
+// natives
+task copyNatives(type: Copy) {
+	from configurations.compile.filter { it.name.endsWith('.jar') == false }.collect { it }
+	into "${buildDir}/assets/sqlite4java-natives"
+}
+
+sourceSets.test {
+	resources.srcDirs += "${buildDir}/assets"
+}
+test.dependsOn copyNatives
+
+jar {
+	from "${buildDir}/assets"
+}
+jar.dependsOn copyNatives
+
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			from components.java
+			artifact sourcesJar {
+				classifier "sources"
+			}
+			artifact javadocJar {
+				classifier "javadoc"
+			}
+			pom.withXml {
+				asNode().children().last() + {
+					resolveStrategy = Closure.DELEGATE_FIRST
+					name project.name
+					description project.description
+					inceptionYear "2015"
+					licenses {
+						license {
+							name "The Apache Software License, Version 2.0"
+							url "http://www.apache.org/license/LICENSE-2.0.txt"
+							distribution "repo"
+						}
+					}
+					developers {
+						developer {
+							id "dai0304"
+							name "MIYAMOTO Daisuke"
+							email "dai.0304@gmail.com"
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// wrapper
+task wrapper(type: Wrapper) {
+	gradleVersion = "4.4.1"
+}
